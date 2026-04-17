@@ -421,6 +421,44 @@ async function handleUnsubscribe(env: Env, token: string): Promise<Response> {
   );
 }
 
+// ── Search proxy (Recreation.gov doesn't allow CORS) ────────────────────────
+
+const CORS_HEADERS: HeadersInit = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+async function handleSearch(query: string): Promise<Response> {
+  if (!query || query.length < 2) {
+    return new Response(JSON.stringify([]), {
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
+  const searchUrl = `https://www.recreation.gov/api/search?q=${encodeURIComponent(query)}&size=20&fq=entity_type:campground`;
+  const resp = await fetch(searchUrl, { headers: RECGOV_HEADERS });
+
+  if (!resp.ok) {
+    return new Response(JSON.stringify([]), {
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
+  const data: any = await resp.json();
+  const results = (data.results || []).map((r: any) => ({
+    id: String(r.entity_id || ""),
+    name: r.name || "",
+    parent: r.parent_name || "",
+    state: r.state_code || "",
+    type: r.campsite_type_of_use || "",
+  }));
+
+  return new Response(JSON.stringify(results), {
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
 // ── Worker entry point ───────────────────────────────────────────────────────
 
 export default {
@@ -431,6 +469,16 @@ export default {
 
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // Handle CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: CORS_HEADERS });
+    }
+
+    if (url.pathname === "/search") {
+      const q = url.searchParams.get("q") || "";
+      return handleSearch(q);
+    }
 
     if (url.pathname === "/check") {
       ctx.waitUntil(checkCabins(env));
@@ -455,7 +503,7 @@ export default {
     }
 
     return new Response(
-      "recgov.me — Cabin Cancellation Monitor\n\nGET /check  — trigger manual check\nGET /status — view active watches\n",
+      "recgov.me — Cabin Cancellation Monitor\n\nGET /search?q=  — search Recreation.gov\nGET /check      — trigger manual check\nGET /status     — view active watches\n",
       { status: 200 }
     );
   },

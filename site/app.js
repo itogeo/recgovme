@@ -2,13 +2,14 @@
 
 const SUPABASE_URL = "https://wfvouoennwwgcwnicrlq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_5MyzhOvqVGtbQohw3hHoag_zaIerGUb";
+const WORKER_URL = "https://recgovme.itogeospatial.workers.dev";
 
 const ALL_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABELS = { mon: "M", tue: "T", wed: "W", thu: "Th", fri: "F", sat: "Sa", sun: "Su" };
 
 let currentEmail = localStorage.getItem("recgovme_email") || "";
-let cabins = [];
 let selectedCabin = null;
+let searchTimeout = null;
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
 
@@ -168,16 +169,7 @@ window.deleteWatch = async function (id) {
   }
 };
 
-// ── Cabin search + URL paste ─────────────────────────────────────────────────
-
-async function loadCabins() {
-  try {
-    const resp = await fetch("cabins.json");
-    cabins = await resp.json();
-  } catch (e) {
-    cabins = [];
-  }
-}
+// ── Cabin search (live from Recreation.gov via worker proxy) ─────────────────
 
 const searchInput = document.getElementById("cabin-search");
 const resultsList = document.getElementById("cabin-results");
@@ -194,63 +186,63 @@ searchInput.addEventListener("input", () => {
   const urlMatch = raw.match(/recreation\.gov\/camping\/campgrounds\/(\d+)/);
   if (urlMatch) {
     const facilityId = urlMatch[1];
-    selectedCabin = { id: facilityId, name: "" };
-    cabinIdInput.value = facilityId;
     resultsList.hidden = true;
-    // Try to fetch the name from the API
-    fetchFacilityName(facilityId);
+    // Look up the name via search proxy
+    fetchFacilityById(facilityId);
     return;
   }
 
-  const q = raw.toLowerCase();
-  if (q.length < 2) {
+  if (raw.length < 2) {
     resultsList.hidden = true;
     return;
   }
 
-  const matches = cabins
-    .filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.parent && c.parent.toLowerCase().includes(q))
-    )
-    .slice(0, 20);
-
-  if (matches.length === 0) {
-    resultsList.hidden = true;
-    return;
-  }
-
-  resultsList.innerHTML = matches
-    .map(
-      (c) =>
-        `<li data-id="${c.id}" data-name="${c.name}">
-          ${c.name}
-          ${c.parent ? `<span class="parent">${c.parent}</span>` : ""}
-        </li>`
-    )
-    .join("");
-  resultsList.hidden = false;
+  // Debounce live search (300ms)
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => liveSearch(raw), 300);
 });
 
-async function fetchFacilityName(facilityId) {
+async function liveSearch(query) {
   try {
-    const resp = await fetch(
-      `https://www.recreation.gov/api/camps/campgrounds/${facilityId}`,
-      { headers: { Accept: "application/json" } }
-    );
-    if (resp.ok) {
-      const data = await resp.json();
-      const name = data?.campground?.facility_name || data?.campground?.campground_name || `Facility ${facilityId}`;
-      selectedCabin = { id: facilityId, name };
-      cabinNameInput.value = name;
-      searchInput.value = name;
-      toast(`Found: ${name}`);
+    const resp = await fetch(`${WORKER_URL}/search?q=${encodeURIComponent(query)}`);
+    const results = await resp.json();
+
+    if (!results.length) {
+      resultsList.hidden = true;
+      return;
     }
+
+    resultsList.innerHTML = results
+      .map(
+        (c) =>
+          `<li data-id="${c.id}" data-name="${c.name}">
+            ${c.name}
+            <span class="parent">${[c.parent, c.state].filter(Boolean).join(" — ")}</span>
+          </li>`
+      )
+      .join("");
+    resultsList.hidden = false;
   } catch (e) {
-    // If CORS blocks it, just use the ID
-    selectedCabin = { id: facilityId, name: `Cabin ${facilityId}` };
+    resultsList.hidden = true;
+  }
+}
+
+async function fetchFacilityById(facilityId) {
+  // Search for the facility ID to get its name
+  try {
+    const resp = await fetch(`${WORKER_URL}/search?q=${facilityId}`);
+    const results = await resp.json();
+    const match = results.find((r) => r.id === facilityId);
+    const name = match ? match.name : `Facility ${facilityId}`;
+    selectedCabin = { id: facilityId, name };
+    cabinNameInput.value = name;
+    searchInput.value = name;
+    cabinIdInput.value = facilityId;
+    toast(`Found: ${name}`);
+  } catch (e) {
+    selectedCabin = { id: facilityId, name: `Facility ${facilityId}` };
     cabinNameInput.value = selectedCabin.name;
+    cabinIdInput.value = facilityId;
   }
 }
 
@@ -377,5 +369,3 @@ form.addEventListener("submit", async (e) => {
 const today = new Date().toISOString().slice(0, 10);
 document.getElementById("date-start").min = today;
 document.getElementById("date-end").min = today;
-
-loadCabins();
