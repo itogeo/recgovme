@@ -118,6 +118,8 @@ function renderWatches(watches) {
           `<span class="day-dot ${allDays || days.includes(d) ? "on" : ""}">${DAY_LABELS[d]}</span>`
       ).join("");
 
+      const emailOn = w.notify !== false; // default true
+
       return `
         <div class="watch-card ${w.active ? "" : "inactive"}" data-id="${w.id}" data-facility="${w.facility_id}">
           <div class="watch-actions">
@@ -131,6 +133,10 @@ function renderWatches(watches) {
             ${formatDate(first)} — ${formatDate(last)} (${dates.length} dates)
           </div>
           <div class="watch-days">${dayDots}</div>
+          <label class="email-toggle">
+            <input type="checkbox" ${emailOn ? "checked" : ""} onchange="toggleNotify('${w.id}', this.checked)" />
+            Email alerts
+          </label>
           <div class="watch-avail" id="avail-${w.id}">
             <button class="check-avail-btn" onclick="checkAvailability('${w.id}', '${w.facility_id}')">Check availability</button>
           </div>
@@ -139,6 +145,20 @@ function renderWatches(watches) {
     })
     .join("");
 }
+
+window.toggleNotify = async function (id, notify) {
+  try {
+    await sbFetch(`watches?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ notify }),
+    });
+    toast(notify ? "Email alerts on" : "Email alerts off");
+  } catch (e) {
+    toast("Failed to update", true);
+    loadWatches();
+  }
+};
 
 window.checkAvailability = async function (watchId, facilityId) {
   const el = document.getElementById(`avail-${watchId}`);
@@ -149,7 +169,7 @@ window.checkAvailability = async function (watchId, facilityId) {
     const data = await resp.json();
 
     if (data.available && data.available.length > 0) {
-      const dateList = data.available.map((d) => formatDate(d)).join(", ");
+      const dateList = data.available.map((d) => formatDateWithDay(d)).join(", ");
       el.innerHTML = `<div class="avail-results open">
         <strong>${data.available.length} date(s) available:</strong><br/>
         ${dateList}
@@ -166,6 +186,12 @@ function formatDate(dateStr) {
   if (!dateStr || dateStr === "?") return "?";
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatDateWithDay(dateStr) {
+  if (!dateStr || dateStr === "?") return "?";
+  const d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 // ── Watch actions ────────────────────────────────────────────────────────────

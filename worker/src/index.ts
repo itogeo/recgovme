@@ -24,6 +24,7 @@ interface Watch {
   facility_name: string;
   dates: string[];
   days_of_week: string[]; // e.g. ["fri","sat"] or [] for all days
+  notify: boolean;
   unsubscribe_token: string;
 }
 
@@ -125,7 +126,7 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchActiveWatches(env: Env): Promise<Watch[]> {
   const resp = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/watches?active=eq.true&select=id,email,facility_id,facility_name,dates,days_of_week,unsubscribe_token`,
+    `${env.SUPABASE_URL}/rest/v1/watches?active=eq.true&select=id,email,facility_id,facility_name,dates,days_of_week,notify,unsubscribe_token`,
     {
       headers: {
         apikey: env.SUPABASE_SERVICE_KEY,
@@ -294,6 +295,10 @@ function formatEmailHtml(
   }
 
   html += `<p style="color: #cc0000; font-weight: bold;">Act fast — cancellations go quickly!</p>`;
+  html += `<p style="margin-top: 16px;"><a href="https://recgovme.itogeospatial.com"
+    style="display: inline-block; padding: 8px 16px; background: #f0f7f2; color: #1a5c2e;
+    text-decoration: none; border-radius: 5px; font-weight: 600;">
+    Manage your watches on recgov.me</a></p>`;
   html += `<hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;"/>`;
   html += `<p style="color: #999; font-size: 12px;">
     <a href="${workerUrl}/unsubscribe?token=${unsubToken}" style="color: #999;">Unsubscribe</a>
@@ -395,9 +400,12 @@ async function checkCabins(env: Env): Promise<string> {
       if (openings.length > 0) {
         console.log(`  ${openings.length} new opening(s) found`);
 
+        // Filter to only watches with notify enabled
+        const notifiableOpenings = openings.filter((o) => o.watch.notify !== false);
+
         // Group openings by email (one email per user)
         const byEmail = new Map<string, Opening[]>();
-        for (const o of openings) {
+        for (const o of notifiableOpenings) {
           const existing = byEmail.get(o.watch.email) || [];
           existing.push(o);
           byEmail.set(o.watch.email, existing);
@@ -411,6 +419,12 @@ async function checkCabins(env: Env): Promise<string> {
               await recordNotification(env, o.watch.id, o.date);
             }
           }
+        }
+
+        // Still record notifications for non-notify watches to prevent future spam if toggled on
+        const silentOpenings = openings.filter((o) => o.watch.notify === false);
+        for (const o of silentOpenings) {
+          await recordNotification(env, o.watch.id, o.date);
         }
 
         totalOpenings += openings.length;
