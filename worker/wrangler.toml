@@ -1,0 +1,18 @@
+name = "recgovme"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# Poll every 5 minutes
+[triggers]
+crons = ["*/5 * * * *"]
+
+# KV for caching previous availability state between runs
+[[kv_namespaces]]
+binding = "STATE"
+id = "26a65672533d459583e11de38a23d1d8"
+
+[vars]
+WORKER_URL = "https://recgovme.itogeospatial.workers.dev"
+
+# Set secrets via: wrangler secret put <NAME>
+# Required: SUPABASE_URL, SUPABASE_SERVICE_KEY, RESEND_API_KEY, EMAIL_FROM
