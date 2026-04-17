@@ -259,6 +259,8 @@ function formatEmailHtml(
 
   for (const [facilityId, facilityOpenings] of byFacility) {
     const name = facilityOpenings[0].facilityName;
+    const watch = facilityOpenings[0].watch;
+    const watchDateSet = new Set(watch.dates);
 
     // New openings section
     html += `<div style="margin: 20px 0; padding: 16px; background: #f0f7f2; border-radius: 8px;">
@@ -271,16 +273,18 @@ function formatEmailHtml(
       </div>`;
     }
 
-    // All available dates section
+    // All available dates section — FILTERED to watch's range + day-of-week
     const avail = allAvailability.get(facilityId);
     if (avail) {
       const allOpen = Object.entries(avail)
         .filter(([, status]) => status === "Available")
         .map(([date]) => date)
+        .filter((date) => watchDateSet.has(date))
+        .filter((date) => matchesDayFilter(date, watch.days_of_week))
         .sort();
 
       if (allOpen.length > 0) {
-        html += `<p style="margin: 12px 0 4px; font-weight: 600; color: #666;">All available dates (${allOpen.length}):</p>`;
+        html += `<p style="margin: 12px 0 4px; font-weight: 600; color: #666;">All available dates in your range (${allOpen.length}):</p>`;
         html += `<div style="font-size: 13px; color: #555; line-height: 1.6;">`;
         html += allOpen.map((d) => fmtDate(d)).join(", ");
         html += `</div>`;

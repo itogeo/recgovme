@@ -85,12 +85,15 @@ if (currentEmail) {
 
 // ── Load & render watches ────────────────────────────────────────────────────
 
+let currentWatches = [];
+
 async function loadWatches() {
   const list = document.getElementById("watches-list");
   try {
     const watches = await sbFetch(
       `watches?email=eq.${encodeURIComponent(currentEmail)}&order=created_at.desc`
     );
+    currentWatches = watches || [];
     renderWatches(watches);
   } catch (e) {
     list.innerHTML = `<p class="empty-state">Failed to load watches.</p>`;
@@ -160,22 +163,40 @@ window.toggleNotify = async function (id, notify) {
   }
 };
 
+function dayOfWeek(dateStr) {
+  const d = new Date(dateStr + "T12:00:00Z");
+  return ALL_DAYS[(d.getUTCDay() + 6) % 7]; // mon=0...sun=6
+}
+
 window.checkAvailability = async function (watchId, facilityId) {
   const el = document.getElementById(`avail-${watchId}`);
   el.innerHTML = `<span class="avail-loading">Checking Recreation.gov...</span>`;
+
+  // Find the watch to get its range + day-of-week filter
+  const watch = currentWatches.find((w) => w.id === watchId);
+  const watchDates = new Set(watch?.dates || []);
+  const watchDays = watch?.days_of_week || [];
+  const allDays = watchDays.length === 0 || watchDays.length === 7;
 
   try {
     const resp = await fetch(`${WORKER_URL}/availability?facility_id=${facilityId}`);
     const data = await resp.json();
 
-    if (data.available && data.available.length > 0) {
-      const dateList = data.available.map((d) => formatDateWithDay(d)).join(", ");
+    // Filter to dates within the watch's range AND matching day-of-week filter
+    const filtered = (data.available || []).filter((d) => {
+      if (watchDates.size && !watchDates.has(d)) return false;
+      if (!allDays && !watchDays.includes(dayOfWeek(d))) return false;
+      return true;
+    });
+
+    if (filtered.length > 0) {
+      const dateList = filtered.map((d) => formatDateWithDay(d)).join(", ");
       el.innerHTML = `<div class="avail-results open">
-        <strong>${data.available.length} date(s) available:</strong><br/>
+        <strong>${filtered.length} date(s) available in your range:</strong><br/>
         ${dateList}
       </div>`;
     } else {
-      el.innerHTML = `<div class="avail-results full">Fully booked — we'll email you when something opens</div>`;
+      el.innerHTML = `<div class="avail-results full">Nothing available in your range — we'll email you when something opens</div>`;
     }
   } catch (e) {
     el.innerHTML = `<div class="avail-results full">Could not check availability</div>`;
