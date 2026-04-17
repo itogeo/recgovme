@@ -11,52 +11,80 @@
     <h1>recgov.me</h1>
     <p class="subtitle">Get emailed when Alaska cabin cancellations appear on Recreation.gov</p>
 
-    <form id="watch-form">
-      <!-- Cabin picker -->
-      <label for="cabin-search">Cabin</label>
-      <div class="cabin-picker">
-        <input
-          type="text"
-          id="cabin-search"
-          placeholder="Search for a cabin..."
-          autocomplete="off"
-          required
-        />
-        <ul id="cabin-results" class="dropdown" hidden></ul>
-        <input type="hidden" id="cabin-id" />
-        <input type="hidden" id="cabin-name" />
+    <!-- Email login -->
+    <div id="login-section">
+      <label for="login-email">Your email</label>
+      <div class="login-row">
+        <input type="email" id="login-email" placeholder="you@example.com" required />
+        <button id="login-btn">Go</button>
       </div>
-
-      <!-- Date range -->
-      <label for="date-start">Dates to watch</label>
-      <div class="date-row">
-        <input type="date" id="date-start" required />
-        <span>to</span>
-        <input type="date" id="date-end" required />
-      </div>
-
-      <!-- Weekends only -->
-      <label class="checkbox-label">
-        <input type="checkbox" id="weekends-only" />
-        Weekends only (Fri &amp; Sat nights)
-      </label>
-
-      <!-- Email -->
-      <label for="email">Email</label>
-      <input type="email" id="email" placeholder="you@example.com" required />
-
-      <button type="submit" id="submit-btn">Watch this cabin</button>
-    </form>
-
-    <div id="success" class="success" hidden>
-      <strong>You're set!</strong> We'll email you when an opening appears.
     </div>
 
-    <div id="error" class="error" hidden></div>
+    <!-- Dashboard (hidden until email entered) -->
+    <div id="dashboard" hidden>
+      <div class="dashboard-header">
+        <span id="user-email"></span>
+        <button id="logout-btn" class="link-btn">change</button>
+      </div>
+
+      <!-- Current watches -->
+      <section id="watches-section">
+        <h2>Your watches</h2>
+        <div id="watches-list" class="watches-list">
+          <p class="empty-state">No watches yet. Add one below.</p>
+        </div>
+      </section>
+
+      <!-- Add new watch -->
+      <section id="add-section">
+        <h2>Add a watch</h2>
+        <form id="watch-form">
+          <!-- Cabin picker -->
+          <label for="cabin-search">Cabin</label>
+          <div class="cabin-picker">
+            <input
+              type="text"
+              id="cabin-search"
+              placeholder="Search for a cabin..."
+              autocomplete="off"
+              required
+            />
+            <ul id="cabin-results" class="dropdown" hidden></ul>
+            <input type="hidden" id="cabin-id" />
+            <input type="hidden" id="cabin-name" />
+          </div>
+
+          <!-- Date window -->
+          <label>Date window</label>
+          <div class="date-row">
+            <input type="date" id="date-start" required />
+            <span>to</span>
+            <input type="date" id="date-end" required />
+          </div>
+
+          <!-- Days of week -->
+          <label>Days of week</label>
+          <div class="dow-picker" id="dow-picker">
+            <button type="button" class="dow-btn active" data-day="mon">Mon</button>
+            <button type="button" class="dow-btn active" data-day="tue">Tue</button>
+            <button type="button" class="dow-btn active" data-day="wed">Wed</button>
+            <button type="button" class="dow-btn active" data-day="thu">Thu</button>
+            <button type="button" class="dow-btn active" data-day="fri">Fri</button>
+            <button type="button" class="dow-btn active" data-day="sat">Sat</button>
+            <button type="button" class="dow-btn active" data-day="sun">Sun</button>
+          </div>
+          <p class="hint">Click to toggle. All selected = any day.</p>
+
+          <button type="submit" id="submit-btn">Add watch</button>
+        </form>
+      </section>
+
+      <div id="toast" class="toast" hidden></div>
+    </div>
 
     <footer>
       <p>
-        We check Recreation.gov every 5 minutes. No account needed.
+        Checks Recreation.gov every 5 minutes. No account needed.
         <br />Unsubscribe anytime via the link in the alert email.
       </p>
     </footer>

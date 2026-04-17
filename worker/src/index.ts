@@ -23,7 +23,7 @@ interface Watch {
   facility_id: string;
   facility_name: string;
   dates: string[];
-  weekends_only: boolean;
+  days_of_week: string[]; // e.g. ["fri","sat"] or [] for all days
   unsubscribe_token: string;
 }
 
@@ -125,7 +125,7 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchActiveWatches(env: Env): Promise<Watch[]> {
   const resp = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/watches?active=eq.true&select=id,email,facility_id,facility_name,dates,weekends_only,unsubscribe_token`,
+    `${env.SUPABASE_URL}/rest/v1/watches?active=eq.true&select=id,email,facility_id,facility_name,dates,days_of_week,unsubscribe_token`,
     {
       headers: {
         apikey: env.SUPABASE_SERVICE_KEY,
@@ -181,10 +181,16 @@ async function getNotifiedDates(env: Env, watchIds: string[]): Promise<Set<strin
 
 // ── Change detection ─────────────────────────────────────────────────────────
 
-function isWeekend(dateStr: string): boolean {
+const DAY_MAP: Record<number, string> = {
+  0: "sun", 1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat",
+};
+
+function matchesDayFilter(dateStr: string, daysOfWeek: string[]): boolean {
+  // Empty array = all days
+  if (!daysOfWeek || daysOfWeek.length === 0) return true;
   const d = new Date(dateStr + "T12:00:00Z");
-  const day = d.getUTCDay();
-  return day === 5 || day === 6; // Friday or Saturday night
+  const dayName = DAY_MAP[d.getUTCDay()];
+  return daysOfWeek.includes(dayName);
 }
 
 function findOpenings(
@@ -197,8 +203,8 @@ function findOpenings(
 
   for (const watch of watches) {
     for (const date of watch.dates) {
-      // Skip if weekends_only and this isn't a weekend
-      if (watch.weekends_only && !isWeekend(date)) continue;
+      // Skip if this date's day of week isn't in the filter
+      if (!matchesDayFilter(date, watch.days_of_week)) continue;
 
       const curr = availability[date];
       const prev = previous[date];
