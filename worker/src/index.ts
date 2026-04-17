@@ -458,10 +458,10 @@ async function handleAvailability(facilityId: string): Promise<Response> {
     });
   }
 
-  // Fetch next 6 months
+  // Fetch current month through 7 months out (covers full 6-month booking window)
   const now = new Date();
   const months = new Set<string>();
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i <= 7; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     months.add(ym);
