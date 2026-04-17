@@ -124,6 +124,15 @@ section {
   margin-bottom: 4px;
 }
 
+.watch-card .cabin-name a {
+  color: #1a5c2e;
+  text-decoration: none;
+}
+
+.watch-card .cabin-name a:hover {
+  text-decoration: underline;
+}
+
 .watch-card .watch-details {
   font-size: 13px;
   color: #666;

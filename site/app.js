@@ -126,7 +126,7 @@ function renderWatches(watches) {
             </button>
             <button class="delete-btn" onclick="deleteWatch('${w.id}')">Delete</button>
           </div>
-          <div class="cabin-name">${w.facility_name}</div>
+          <div class="cabin-name"><a href="https://www.recreation.gov/camping/campgrounds/${w.facility_id}" target="_blank">${w.facility_name}</a></div>
           <div class="watch-details">
             ${formatDate(first)} — ${formatDate(last)} (${dates.length} dates)
           </div>
