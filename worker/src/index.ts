@@ -228,32 +228,72 @@ function findOpenings(
 
 // ── Email notifications ──────────────────────────────────────────────────────
 
-function formatEmailHtml(openings: Opening[], unsubToken: string, workerUrl: string): string {
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function formatEmailHtml(
+  openings: Opening[],
+  allAvailability: Map<string, SiteAvailability>,
+  unsubToken: string,
+  workerUrl: string
+): string {
   let html = `<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
     <h2 style="color: #1a5c2e;">Cabin Opening Found!</h2>
     <p style="color: #666;">Detected at: ${new Date().toISOString().replace("T", " ").slice(0, 19)} UTC</p>`;
 
+  // Group openings by facility
+  const byFacility = new Map<string, Opening[]>();
   for (const o of openings) {
-    const d = new Date(o.date + "T12:00:00Z");
-    const fmt = d.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      timeZone: "UTC",
-    });
+    const existing = byFacility.get(o.facilityId) || [];
+    existing.push(o);
+    byFacility.set(o.facilityId, existing);
+  }
 
-    html += `<div style="margin: 16px 0; padding: 16px; background: #f0f7f2; border-radius: 8px;">
-      <strong style="font-size: 18px;">${o.facilityName}</strong><br/>
-      <span style="font-size: 16px; color: #1a5c2e;">${fmt}</span><br/>
-      <a href="https://www.recreation.gov/camping/campgrounds/${o.facilityId}"
-        style="display: inline-block; margin-top: 12px; padding: 10px 20px;
-        background: #1a5c2e; color: white; text-decoration: none; border-radius: 5px;">
-        Book Now on Recreation.gov</a>
+  for (const [facilityId, facilityOpenings] of byFacility) {
+    const name = facilityOpenings[0].facilityName;
+
+    // New openings section
+    html += `<div style="margin: 20px 0; padding: 16px; background: #f0f7f2; border-radius: 8px;">
+      <strong style="font-size: 18px;">${name}</strong>`;
+
+    html += `<p style="margin: 8px 0 4px; font-weight: 600; color: #1a5c2e;">New opening(s):</p>`;
+    for (const o of facilityOpenings) {
+      html += `<div style="padding: 4px 0; font-size: 15px;">
+        ${fmtDate(o.date)}
+      </div>`;
+    }
+
+    // All available dates section
+    const avail = allAvailability.get(facilityId);
+    if (avail) {
+      const allOpen = Object.entries(avail)
+        .filter(([, status]) => status === "Available")
+        .map(([date]) => date)
+        .sort();
+
+      if (allOpen.length > 0) {
+        html += `<p style="margin: 12px 0 4px; font-weight: 600; color: #666;">All available dates (${allOpen.length}):</p>`;
+        html += `<div style="font-size: 13px; color: #555; line-height: 1.6;">`;
+        html += allOpen.map((d) => fmtDate(d)).join(", ");
+        html += `</div>`;
+      }
+    }
+
+    html += `<a href="https://www.recreation.gov/camping/campgrounds/${facilityId}"
+      style="display: inline-block; margin-top: 12px; padding: 10px 20px;
+      background: #1a5c2e; color: white; text-decoration: none; border-radius: 5px;">
+      Book Now on Recreation.gov</a>
     </div>`;
   }
 
-  html += `<p style="color: #cc0000; font-weight: bold;">Act fast — cabin cancellations go quickly!</p>`;
+  html += `<p style="color: #cc0000; font-weight: bold;">Act fast — cancellations go quickly!</p>`;
   html += `<hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;"/>`;
   html += `<p style="color: #999; font-size: 12px;">
     <a href="${workerUrl}/unsubscribe?token=${unsubToken}" style="color: #999;">Unsubscribe</a>
@@ -266,11 +306,12 @@ async function sendEmail(
   env: Env,
   email: string,
   openings: Opening[],
+  allAvailability: Map<string, SiteAvailability>,
   unsubToken: string
 ): Promise<boolean> {
   const cabinNames = [...new Set(openings.map((o) => o.facilityName))];
   const subject = `Cabin Alert: ${openings.length} opening(s) — ${cabinNames.join(", ")}`;
-  const html = formatEmailHtml(openings, unsubToken, env.WORKER_URL);
+  const html = formatEmailHtml(openings, allAvailability, unsubToken, env.WORKER_URL);
 
   try {
     const resp = await fetch("https://api.resend.com/emails", {
@@ -321,6 +362,8 @@ async function checkCabins(env: Env): Promise<string> {
   const allWatchIds = watches.map((w) => w.id);
   const notifiedSet = await getNotifiedDates(env, allWatchIds);
 
+  // Store availability per facility for email context
+  const allAvailability = new Map<string, SiteAvailability>();
   let totalOpenings = 0;
 
   for (const [facilityId, facilityWatches] of byFacility) {
@@ -337,6 +380,7 @@ async function checkCabins(env: Env): Promise<string> {
 
     try {
       const current = await fetchFacilityAvailability(facilityId, months);
+      allAvailability.set(facilityId, current);
       const availCount = Object.values(current).filter((s) => s === "Available").length;
       console.log(`  ${Object.keys(current).length} dates fetched, ${availCount} available`);
 
@@ -361,9 +405,8 @@ async function checkCabins(env: Env): Promise<string> {
 
         for (const [email, userOpenings] of byEmail) {
           const unsubToken = userOpenings[0].watch.unsubscribe_token;
-          const sent = await sendEmail(env, email, userOpenings, unsubToken);
+          const sent = await sendEmail(env, email, userOpenings, allAvailability, unsubToken);
           if (sent) {
-            // Record notifications to prevent re-alerting
             for (const o of userOpenings) {
               await recordNotification(env, o.watch.id, o.date);
             }
@@ -389,6 +432,48 @@ async function checkCabins(env: Env): Promise<string> {
   const summary = `Checked ${byFacility.size} cabin(s), ${totalOpenings} opening(s) found`;
   console.log(summary);
   return summary;
+}
+
+// ── Availability endpoint (for frontend on new watch) ────────────────────────
+
+async function handleAvailability(facilityId: string): Promise<Response> {
+  if (!facilityId) {
+    return new Response(JSON.stringify({ error: "missing facility_id" }), {
+      status: 400,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
+
+  // Fetch next 6 months
+  const now = new Date();
+  const months = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    months.add(ym);
+  }
+
+  try {
+    const avail = await fetchFacilityAvailability(facilityId, months);
+    const available = Object.entries(avail)
+      .filter(([, status]) => status === "Available")
+      .map(([date]) => date)
+      .sort();
+    const reserved = Object.entries(avail)
+      .filter(([, status]) => status !== "Available")
+      .map(([date]) => date)
+      .sort();
+
+    return new Response(
+      JSON.stringify({ facility_id: facilityId, available, reserved, total: Object.keys(avail).length }),
+      { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "failed to fetch availability" }), {
+      status: 502,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
+  }
 }
 
 // ── Unsubscribe handler ──────────────────────────────────────────────────────
@@ -478,6 +563,11 @@ export default {
     if (url.pathname === "/search") {
       const q = url.searchParams.get("q") || "";
       return handleSearch(q);
+    }
+
+    if (url.pathname === "/availability") {
+      const fid = url.searchParams.get("facility_id") || "";
+      return handleAvailability(fid);
     }
 
     if (url.pathname === "/check") {

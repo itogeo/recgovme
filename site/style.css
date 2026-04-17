@@ -186,6 +186,49 @@ section {
   opacity: 0.5;
 }
 
+.watch-avail {
+  margin-top: 10px;
+}
+
+.check-avail-btn {
+  background: none;
+  border: 1px solid #1a5c2e;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #1a5c2e;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.check-avail-btn:hover {
+  background: #f0f7f2;
+}
+
+.avail-loading {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+}
+
+.avail-results {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.avail-results.open {
+  background: #e8f5e9;
+  color: #1a5c2e;
+}
+
+.avail-results.full {
+  background: #fff3e0;
+  color: #e65100;
+}
+
 /* ── Form ──────────────────────────────────── */
 
 label {
